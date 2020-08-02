@@ -1,0 +1,42 @@
+{
+  "name": "dragonbe/ohdear-status-updater",
+  "description": "Update OhDearApp status pages from within Slack",
+  "minimum-stability": "stable",
+  "license": "proprietary",
+  "authors": [
+    {
+      "name": "Michelangelo van Dam",
+      "email": "dragonbe+github@gmail.com"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "OhDear\\Status\\": "src"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "OhDearTest\\Status\\": "tests/unit"
+    }
+  },
+  "require": {
+    "php": ">= 7.3",
+    "ext-curl": "^7.3",
+    "ext-json": "*"
+  },
+  "require-dev": {
+    "squizlabs/php_codesniffer": "^3.5",
+    "phpunit/phpunit": "^9.2",
+    "infection/infection": "^0.16.4",
+    "phpstan/phpstan": "^0.12.34",
+    "behat/behat": "^3.7"
+  },
+  "scripts": {
+    "test-all": [
+      "phpcs",
+      "phpunit --strict-coverage --colors=always",
+      "infection --skip-initial-tests --only-covered --coverage=build/logs --min-msi=90 --min-covered-msi=85 --no-progress --threads=4",
+      "phpstan analyse"
+    ]
+  }
+}

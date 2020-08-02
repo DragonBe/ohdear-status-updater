@@ -1,0 +1,9 @@
+/vendor/
+/build/
+/data/logs/*.log
+/phpcs.xml
+/phpunit.xml
+/infection.json
+/behat.yml
+/phpstan.neon
+/deploy.sh
