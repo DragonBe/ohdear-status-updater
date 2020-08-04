@@ -13,7 +13,6 @@ class SlackHandler
     private const OHDEAR_STATUS_PAGE_URI  = 'https://ohdear.app/api/status-page-updates';
     private const OHDEAR_USER_AGENT       = 'SlackOhDearStatus/0.0.1';
     private const OHDEAR_DEFAULT_SEVERITY = 0;
-    private const OHDEAR_FAILED_RETRIES   = 3;
     public const OHDEAR_STATUS_PAGE_ID    = 'id';
     public const OHDEAR_API_TOKEN         = 'token';
     public const SLACK_CMD_COMMAND        = 'command';
@@ -214,13 +213,7 @@ class SlackHandler
         if (self::$testMode) {
             return $statusUpdate;
         }
-        for ($i = 0; $i < self::OHDEAR_FAILED_RETRIES; $i++) {
-            $statusCode = $this->makeRequest($token, $payload);
-            $range = range(200, 299);
-            if (in_array($statusCode, $range)) {
-                break;
-            }
-        }
+        $this->makeRequest($token, $payload);
         return $statusUpdate;
     }
 
