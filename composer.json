@@ -32,11 +32,15 @@
     "behat/behat": "^3.7"
   },
   "scripts": {
+    "phpcs": "phpcs",
+    "phpunit": "phpunit --strict-coverage --colors=always",
+    "infection": "infection --skip-initial-tests --only-covered --coverage=build/logs --min-msi=90 --min-covered-msi=85 --no-progress --threads=4",
+    "phpstan": "phpstan analyse",
     "test-all": [
-      "phpcs",
-      "phpunit --strict-coverage --colors=always",
-      "infection --skip-initial-tests --only-covered --coverage=build/logs --min-msi=90 --min-covered-msi=85 --no-progress --threads=4",
-      "phpstan analyse"
+      "@phpcs",
+      "@phpunit",
+      "@infection",
+      "@phpstan"
     ]
   }
 }

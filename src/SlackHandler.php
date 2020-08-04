@@ -4,18 +4,20 @@ namespace OhDear\Status;
 
 use DomainException;
 use InvalidArgumentException;
-use OhDear\Status\SlashCommand\Message;
 use OhDear\Status\SlashCommand\MessageInterface;
 use OhDear\Status\SlashCommand\StatusUpdate;
 use OhDear\Status\SlashCommand\StatusUpdateInterface;
 
 class SlackHandler
 {
-    private const OHDEAR_STATUS_PAGE_URI = 'https://ohdear.app/api/status-page-updates';
-    public const OHDEAR_STATUS_PAGE_ID = 'id';
-    public const OHDEAR_API_TOKEN = 'token';
-    public const SLACK_CMD_COMMAND = 'command';
-    public const SLACK_CMD_TEXT = 'text';
+    private const OHDEAR_STATUS_PAGE_URI  = 'https://ohdear.app/api/status-page-updates';
+    private const OHDEAR_USER_AGENT       = 'SlackOhDearStatus/0.0.1';
+    private const OHDEAR_DEFAULT_SEVERITY = 0;
+    private const OHDEAR_FAILED_RETRIES   = 3;
+    public const OHDEAR_STATUS_PAGE_ID    = 'id';
+    public const OHDEAR_API_TOKEN         = 'token';
+    public const SLACK_CMD_COMMAND        = 'command';
+    public const SLACK_CMD_TEXT           = 'text';
 
     /**
      * @var bool
@@ -74,9 +76,10 @@ class SlackHandler
      * Handles the request from Slack and passes it on
      * to Oh Dear! for processing.
      *
+     * @return StatusUpdateInterface
      * @throws DomainException
      */
-    public function handleRequest(): void
+    public function handleRequest(): StatusUpdateInterface
     {
         $requiredGetFields = [
             self::OHDEAR_STATUS_PAGE_ID,
@@ -98,7 +101,7 @@ class SlackHandler
             throw new DomainException('We have problems processing slack request');
         }
         $statusUpdate = $this->prepareStatusUpdate($slackRequest);
-        $this->updateOhDear($statusUpdate);
+        return $this->updateOhDear($statusUpdate);
     }
 
     /**
@@ -121,12 +124,25 @@ class SlackHandler
         return true;
     }
 
+    /**
+     * Prepare the Oh Dear! Status Update entity
+     *
+     * @param MessageInterface $slackMessage
+     * @return StatusUpdateInterface
+     */
     private function prepareStatusUpdate(MessageInterface $slackMessage): StatusUpdateInterface
     {
         $text = $this->scrubInput($slackMessage->getText());
         return $this->splitText($text);
     }
 
+    /**
+     * Split the provided text into meaningful components using
+     * the single or double quote as separator for the text blocks.
+     *
+     * @param string $text
+     * @return StatusUpdateInterface
+     */
     private function splitText(string $text): StatusUpdateInterface
     {
         $matches = [];
@@ -137,6 +153,9 @@ class SlackHandler
         if (4 !== $items) {
             throw new InvalidArgumentException('Text was not formatted correctly');
         }
+        list ($input, $severity, $title, $text) = $matches;
+        unset($input);
+
         $allowedLevels = [
             StatusUpdate::OHDEAR_LEVEL_INFO,
             StatusUpdate::OHDEAR_LEVEL_WARN,
@@ -144,13 +163,14 @@ class SlackHandler
             StatusUpdate::OHDEAR_LEVEL_RESOLVED,
             StatusUpdate::OHDEAR_LEVEL_SCHEDULED,
         ];
-        if (! in_array($matches[1], $allowedLevels)) {
-            $matches[1] = StatusUpdate::OHDEAR_LEVEL_INFO;
+        if (! in_array($severity, $allowedLevels)) {
+            $severity = $allowedLevels[self::OHDEAR_DEFAULT_SEVERITY];
         }
+
         $data = [
-            'severity' => $matches[1],
-            'title'    => $matches[2],
-            'text'     => $matches[3],
+            'severity' => $severity,
+            'title'    => $title,
+            'text'     => $text,
         ];
         $statusUpdate = $this->hydrator->hydrate($this->statusUpdatePrototype, $data);
         if (! $statusUpdate instanceof StatusUpdateInterface) {
@@ -179,15 +199,41 @@ class SlackHandler
             return str_replace($search, $replace, $rawInput);
     }
 
-    private function updateOhDear(StatusUpdateInterface $statusUpdate): void
+    /**
+     * Update the Oh Dear! status page via API
+     *
+     * @param StatusUpdateInterface $statusUpdate
+     * @return StatusUpdateInterface
+     */
+    private function updateOhDear(StatusUpdateInterface $statusUpdate): StatusUpdateInterface
     {
         $data = $this->hydrator->extract($statusUpdate);
         $token = $this->getData[self::OHDEAR_API_TOKEN];
         $data['status_page_id'] = $this->getData[self::OHDEAR_STATUS_PAGE_ID];
         $payload = json_encode($data);
         if (self::$testMode) {
-            return;
+            return $statusUpdate;
         }
+        for ($i = 0; $i < self::OHDEAR_FAILED_RETRIES; $i++) {
+            $statusCode = $this->makeRequest($token, $payload);
+            $range = range(200, 299);
+            if (in_array($statusCode, $range)) {
+                break;
+            }
+        }
+        return $statusUpdate;
+    }
+
+    /**
+     * Make an HTTP Request to the Oh Dear! API service and returns
+     * the status code of the request.
+     *
+     * @param string $token
+     * @param string $payload
+     * @return int
+     */
+    private function makeRequest(string $token, string $payload): int
+    {
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL            => self::OHDEAR_STATUS_PAGE_URI,
@@ -197,7 +243,7 @@ class SlackHandler
             CURLINFO_HEADER_OUT    => true,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 10,
-            CURLOPT_USERAGENT      => 'SlackOhDearStatus/0.0.1',
+            CURLOPT_USERAGENT      => self::OHDEAR_USER_AGENT,
             CURLOPT_HTTPHEADER     => [
                 'Authorization: Bearer ' . $token,
                 'Accept: application/json',
@@ -205,10 +251,9 @@ class SlackHandler
             ],
             CURLOPT_POSTFIELDS     => $payload,
         ]);
-        $response = curl_exec($ch);
-        $error = curl_error($ch);
-        $headers = curl_getinfo($ch, CURLINFO_HEADER_OUT);
         $statusCode = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        curl_exec($ch);
         curl_close($ch);
+        return intval($statusCode);
     }
 }
