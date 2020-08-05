@@ -13,6 +13,11 @@ class StatusUpdate implements StatusUpdateInterface
     public const OHDEAR_LEVEL_SCHEDULED = 'scheduled';
 
     /**
+     * @var int
+     */
+    private $id;
+
+    /**
      * @var string
      */
     private $severity;
@@ -38,20 +43,38 @@ class StatusUpdate implements StatusUpdateInterface
     private $pinned;
 
     /**
+     * @var int
+     */
+    private $statusPageId;
+
+    /**
+     * @var string
+     */
+    private $responseUrl;
+
+    /**
      * StatusUpdate constructor.
+     *
+     * @param int $id
      * @param string $severity
      * @param string $title
      * @param string $message
      * @param DateTimeImmutable|null $time
      * @param bool $pinned
+     * @param int $statusPageId
+     * @param string $responseUrl
      */
     public function __construct(
+        int $id = 0,
         string $severity = self::OHDEAR_LEVEL_INFO,
         string $title = '',
         string $message = '',
-        ?DateTimeImmutable $time = null,
-        bool $pinned = false
+        DateTimeImmutable $time = null,
+        bool $pinned = false,
+        int $statusPageId = 0,
+        string $responseUrl = ''
     ) {
+        $this->id = $id;
         $this->severity = $severity;
         $this->title = $title;
         $this->text = $message;
@@ -60,6 +83,16 @@ class StatusUpdate implements StatusUpdateInterface
         }
         $this->time = $time;
         $this->pinned = $pinned;
+        $this->statusPageId = $statusPageId;
+        $this->responseUrl = $responseUrl;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getId(): int
+    {
+        return $this->id;
     }
 
     /**
@@ -100,5 +133,21 @@ class StatusUpdate implements StatusUpdateInterface
     public function isPinned(): bool
     {
         return $this->pinned;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getStatusPageId(): int
+    {
+        return $this->statusPageId;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getResponseUrl(): string
+    {
+        return $this->responseUrl;
     }
 }

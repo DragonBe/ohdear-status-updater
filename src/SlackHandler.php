@@ -7,6 +7,8 @@ use InvalidArgumentException;
 use OhDear\Status\SlashCommand\MessageInterface;
 use OhDear\Status\SlashCommand\StatusUpdate;
 use OhDear\Status\SlashCommand\StatusUpdateInterface;
+use RuntimeException;
+use function json_decode;
 
 class SlackHandler
 {
@@ -100,7 +102,7 @@ class SlackHandler
             throw new DomainException('We have problems processing slack request');
         }
         $statusUpdate = $this->prepareStatusUpdate($slackRequest);
-        return $this->updateOhDear($statusUpdate);
+        return $this->updateOhDear($statusUpdate, $slackRequest);
     }
 
     /**
@@ -202,10 +204,14 @@ class SlackHandler
      * Update the Oh Dear! status page via API
      *
      * @param StatusUpdateInterface $statusUpdate
+     * @param MessageInterface $slackRequest
      * @return StatusUpdateInterface
+     * @throws RuntimeException
      */
-    private function updateOhDear(StatusUpdateInterface $statusUpdate): StatusUpdateInterface
-    {
+    private function updateOhDear(
+        StatusUpdateInterface $statusUpdate,
+        MessageInterface $slackRequest
+    ): StatusUpdateInterface {
         $data = $this->hydrator->extract($statusUpdate);
         $token = $this->getData[self::OHDEAR_API_TOKEN];
         $data['status_page_id'] = $this->getData[self::OHDEAR_STATUS_PAGE_ID];
@@ -213,8 +219,15 @@ class SlackHandler
         if (self::$testMode) {
             return $statusUpdate;
         }
-        $this->makeRequest($token, $payload);
-        return $statusUpdate;
+        $response = $this->makeRequest($token, $payload);
+        $responseData = json_decode($response, true);
+        $responseData['status_page_id'] = $this->getData[self::OHDEAR_STATUS_PAGE_ID];
+        $responseData['reply_url'] = $slackRequest->getResponseUrl();
+        $update = $this->hydrator->hydrate($statusUpdate, $responseData);
+        if (! $update instanceof StatusUpdateInterface) {
+            throw new DomainException('Issue creating a proper response');
+        }
+        return $update;
     }
 
     /**
@@ -223,9 +236,10 @@ class SlackHandler
      *
      * @param string $token
      * @param string $payload
-     * @return int
+     * @return string
+     * @throws RuntimeException
      */
-    private function makeRequest(string $token, string $payload): int
+    private function makeRequest(string $token, string $payload): string
     {
         $ch = curl_init();
         curl_setopt_array($ch, [
@@ -244,9 +258,57 @@ class SlackHandler
             ],
             CURLOPT_POSTFIELDS     => $payload,
         ]);
+        $response = curl_exec($ch);
         $statusCode = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        curl_exec($ch);
+        $errorMessage = curl_error($ch);
         curl_close($ch);
-        return intval($statusCode);
+        if (201 !== $statusCode) {
+            throw new RuntimeException('Problem updating status: ' . $errorMessage);
+        }
+        if (false === $response) {
+            throw new RuntimeException('Failure to update status page: ' . $errorMessage);
+        }
+        return $response;
+    }
+
+    /**
+     * Make an HTTP Request to the Slack API service to post
+     * response of our status update.
+     *
+     * @param string $responseUri
+     * @param string $payload
+     * @return string
+     * @throws RuntimeException
+     */
+    public function updateSlack(string $responseUri, string $payload): string
+    {
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $responseUri,
+            CURLOPT_FAILONERROR    => false,
+            CURLOPT_FRESH_CONNECT  => true,
+            CURLOPT_POST           => true,
+            CURLINFO_HEADER_OUT    => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_USERAGENT      => self::OHDEAR_USER_AGENT,
+            CURLOPT_HTTPHEADER     => [
+                'Accept: application/json',
+                'Content-Type: application/json',
+            ],
+            CURLOPT_POSTFIELDS     => $payload,
+        ]);
+        $response = curl_exec($ch);
+        $statusCode = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $errorMessage = curl_error($ch);
+        curl_close($ch);
+        $range = range(200, 299);
+        if (! in_array($statusCode, $range)) {
+            throw new RuntimeException('Problem updating status: ' . $errorMessage);
+        }
+        if (false === $response) {
+            throw new RuntimeException('Failure to update Slack: ' . $errorMessage);
+        }
+        return $response;
     }
 }

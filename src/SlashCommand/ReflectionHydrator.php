@@ -2,6 +2,7 @@
 
 namespace OhDear\Status\SlashCommand;
 
+use DateTimeImmutable;
 use DateTimeInterface;
 use OhDear\Status\HydratorInterface;
 use ReflectionClass;
@@ -11,9 +12,9 @@ class ReflectionHydrator implements HydratorInterface
     /**
      * @inheritDoc
      *
-     * @param MessageInterface $object
+     * @param MessageInterface|StatusUpdateInterface $object
      * @param array $data
-     * @return MessageInterface
+     * @return MessageInterface|StatusUpdateInterface
      */
     public function hydrate(object $object, array $data): object
     {
@@ -23,7 +24,11 @@ class ReflectionHydrator implements HydratorInterface
             $key = $this->camelToSnakeConvert($property->getName());
             if (array_key_exists($key, $data)) {
                 $property->setAccessible(true);
-                $property->setValue($object, $data[$key]);
+                $value = $data[$key];
+                if ('time' === $key) {
+                    $value = new DateTimeImmutable($data[$key]);
+                }
+                $property->setValue($object, $value);
             }
         }
         return $object;

@@ -7,6 +7,13 @@ use DateTimeImmutable;
 interface StatusUpdateInterface
 {
     /**
+     * The ID of the status update
+     *
+     * @return int
+     */
+    public function getId(): int;
+
+    /**
      * The level of status update
      *
      * @return string
@@ -40,4 +47,18 @@ interface StatusUpdateInterface
      * @return bool
      */
     public function isPinned(): bool;
+
+    /**
+     * Retrieve the ID of the status page
+     *
+     * @return int
+     */
+    public function getStatusPageId(): int;
+
+    /**
+     * The response URL to reply back to Slack
+     *
+     * @return string
+     */
+    public function getResponseUrl(): string;
 }
